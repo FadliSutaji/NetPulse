@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Union
-from pydantic import field_validator
+from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,17 +20,14 @@ class Settings(BaseSettings):
         f"sqlite+aiosqlite:///{_DEFAULT_DB_PATH}",
     )
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["*"]
+    # CORS disimpan sebagai string agar Pydantic EnvSettingsSource tidak pernah error parsing
+    CORS_ORIGINS: str = "*"
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, list):
-            return v
-        return ["*"]
+    @property
+    def cors_origins_list(self) -> List[str]:
+        if not self.CORS_ORIGINS or self.CORS_ORIGINS == "*":
+            return ["*"]
+        return [i.strip() for i in self.CORS_ORIGINS.split(",") if i.strip()]
 
     # Alert Thresholds
     ALERT_CPU_THRESHOLD: float = float(os.getenv("ALERT_CPU_THRESHOLD", "85.0"))
