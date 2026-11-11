@@ -1,6 +1,6 @@
 import os
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,10 +10,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 jam
 
-    # Database
+    # Database: Default ke SQLite lokal jika jalan tanpa Docker, atau PostgreSQL/TimescaleDB via ENV
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://netpulse:netpulse_secret@localhost:5432/netpulse_db",
+        "sqlite+aiosqlite:///./netpulse_local.db",
     )
 
     # CORS
@@ -29,8 +29,7 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
 
-    class Config:
-        case_sensitive = True
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 
 settings = Settings()
