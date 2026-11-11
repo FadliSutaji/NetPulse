@@ -1,111 +1,224 @@
-# NetPulse Demo Guide
+# NetPulse — Demo & Deployment Guide
 
-## Prerequisites
-- **Python 3.10+** (virtualenv recommended) 
-- **Node.js 20+** (for the demo UI) 
-- **Docker** (optional – we use SQLite fallback, so not mandatory) 
-- A **Discord webhook URL** or **Telegram Bot token + chat id** (to receive alerts).
+> Real-time Cloud Server Monitoring dengan TimescaleDB, FastAPI, dan Telegram Alerting.
 
-## 1️⃣ Start the backend API
-```powershell
-# From the repo root
-cd netpulse\backend
-# If you prefer SQLite (no TimescaleDB), just run:
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-- Ensure `backend/.env` contains the webhook values, e.g.:
-```
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxxx/xxxx
-# or
-TELEGRAM_BOT_TOKEN=123456:ABCdef...
-TELEGRAM_CHAT_ID=987654321
-```
-- Restart the server after any `.env` change.
+---
 
-## 2️⃣ Start the frontend dashboard (demo prototype)
-```powershell
-cd netpulse\frontend
-npm install   # first time only
-npm run dev    # serves UI on http://localhost:3000
-```
-You should see a login screen (default admin/admin123) and then the dashboard.
+## Arsitektur Deployment
 
-## 3️⃣ Register a server (once)
-- Open Swagger UI: `http://localhost:8000/docs`.
-- `POST /api/v1/auth/register` → create a user (e.g. `user@example.com` / `password`).
-- `POST /api/v1/auth/login` → copy the **access token**.
-- Click **Authorize** in Swagger, paste the token.
-- `POST /api/v1/servers` with body:
-```json
-{
-  "name": "Demo‑VM",
-  "ip_address": "127.0.0.1"
-}
 ```
-- The response contains `api_key`. **Copy it** – you’ll need it for the agent.
-
-## 4️⃣ Configure the agent
-1. In `netpulse/agent` copy the template:
-```powershell
-cp config.json.example config.json
-```
-2. Edit `config.json`:
-```json
-{
-  "api_url": "http://localhost:8000/api/v1/ingest",
-  "server_key": "<PASTE_API_KEY_HERE>",
-  "interval_seconds": 10
-}
-```
-3. *(Optional – force high load for testing)* add two extra fields (they are ignored by default):
-```json
-  "force_high_cpu": 95,
-  "force_high_ram": 92
-```
-4. Save the file.
-
-## 5️⃣ Run the monitoring agent
-```powershell
-cd netpulse\agent
-python agent.py
-```
-You should see log lines such as:
-```
-[INFO] Telemetri terkirim! CPU: 12.5% | RAM: 45.2%
-```
-The dashboard will now show the server card **GREEN (ONLINE)** and live line charts updating every 10 s.
-
-## 6️⃣ Test alerts
-### High‑CPU / High‑RAM
-- Keep `force_high_cpu` / `force_high_ram` set as in step 4.3 and restart the agent.
-- The dashboard will immediately display an **ALERT HIGH_CPU** / **HIGH_RAM** entry and the Discord/Telegram channel will receive a notification.
-### Server‑down (dead‑man switch)
-- Stop the agent with `Ctrl‑C`.
-- After 30 s the backend marks the server **RED (OFFLINE)** and sends a *SERVER DOWN* alert.
-
-## 7️⃣ Add more agents (multiple servers)
-- Repeat steps 3–5 with a fresh API key for each new server.
-- Each agent can run on a different machine/VM; the dashboard aggregates them all.
-
-## 8️⃣ Clean‑up / stop services
-```powershell
-# Stop backend (Ctrl‑C in its terminal)
-# Stop frontend (Ctrl‑C in its terminal)
-# Optionally delete the SQLite DB:
-rm netpulse_local.db
+┌─────────────────────────────────────────────────────────┐
+│  Ubuntu VM (Oracle Cloud) — 100.103.223.101 (Tailscale) │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │ TimescaleDB  │  │  Backend API │  │  Frontend UI  │  │
+│  │ (Docker)     │◄─│  (Docker)    │◄─│  (Node.js)    │  │
+│  │ Port: 5432   │  │  Port: 8000  │  │  Port: 3000   │  │
+│  └──────────────┘  └──────┬───────┘  └───────────────┘  │
+│                           ▲                             │
+│                    ┌──────┴───────┐                      │
+│                    │  Agent.py    │                      │
+│                    │  (venv)      │                      │
+│                    └──────────────┘                      │
+└─────────────────────────────────────────────────────────┘
+         ▲
+         │ Tailscale VPN
+         ▼
+┌─────────────────────────────┐
+│  Laptop / PC (Browser)      │
+│  http://100.103.223.101:3000│
+└─────────────────────────────┘
 ```
 
 ---
-**That’s it!** You now have a fully‑functional NetPulse monitoring prototype that:
-- Ingests telemetry via `agent.py`
-- Stores metrics in SQLite (or TimescaleDB if you switch Docker‑compose)
-- Shows real‑time graphs and server status on the UI
-- Sends alerts to Discord/Telegram.
 
-Feel free to ask for any of the following next:
-- Guidance on adding the Discord webhook URL
-- Adding the high‑load override to `agent.py`
-- Switching to the full Next.js frontend instead of the demo prototype
-- Persisting the demo steps into a CI script
+## Prerequisites
+
+- **Ubuntu Server 22.04+** (Oracle Cloud VM atau VPS lain)
+- **Docker** & **Docker Compose** terinstall
+- **Node.js 18+** (untuk frontend)
+- **Python 3.10+** dengan `venv` (untuk agent)
+- **Tailscale** (opsional, untuk akses remote dari laptop)
+
+---
+
+## 1️⃣ Clone Repository & Jalankan Backend + Database
+
+```bash
+# Clone repo
+git clone https://github.com/FadliSutaji/NetPulse.git
+cd NetPulse
+git checkout develop
+
+# Jalankan TimescaleDB + Backend via Docker Compose
+sudo docker compose up -d --build
+
+# Verifikasi container berjalan
+sudo docker compose ps
+# Pastikan: netpulse-db (healthy), netpulse-backend (up)
+```
+
+Konfigurasi environment (opsional) di `docker-compose.yml`:
+```yaml
+environment:
+  CORS_ORIGINS: "*"
+  TELEGRAM_BOT_TOKEN: "your_bot_token"
+  TELEGRAM_CHAT_ID: "your_chat_id"
+```
+
+## 2️⃣ Jalankan Frontend Dashboard
+
+```bash
+cd frontend
+npm install        # pertama kali saja
+node server.js &   # serve di port 3000
+```
+
+Buka browser: **`http://<IP_SERVER>:3000`**
+
+Login: `admin` / `admin123`
+
+## 3️⃣ Daftarkan Server Target dari Dashboard
+
+1. Klik **"+ Tambah Server / VM Baru"** di dashboard
+2. Isi nama server dan IP address
+3. Klik **"Generate X-Server-Key"**
+4. **Salin API Key** yang muncul (klik tombol 📋 Salin Key)
+
+## 4️⃣ Konfigurasi & Jalankan Agent
+
+```bash
+cd /path/to/NetPulse/agent
+
+# Buat virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Konfigurasi agent
+cp config.json.example config.json
+nano config.json
+```
+
+Isi `config.json`:
+```json
+{
+  "api_url": "http://<IP_SERVER>:8000/api/v1/ingest",
+  "server_key": "<PASTE_API_KEY_DARI_DASHBOARD>",
+  "interval_seconds": 10
+}
+```
+
+Jalankan agent:
+```bash
+source venv/bin/activate
+python3 agent.py
+```
+
+Output yang diharapkan:
+```
+[INFO] Memulai NetPulse Monitoring Agent...
+[INFO] Telemetri terkirim! CPU: 12.5% | RAM: 45.2%
+```
+
+Dashboard akan menampilkan server **● ONLINE** dengan grafik CPU & RAM real-time.
+
+## 5️⃣ Test Fitur Alert
+
+### High CPU / High RAM Alert
+Tambahkan override di `config.json`:
+```json
+{
+  "api_url": "http://<IP_SERVER>:8000/api/v1/ingest",
+  "server_key": "<API_KEY>",
+  "interval_seconds": 10,
+  "force_high_cpu": 95,
+  "force_high_ram": 92
+}
+```
+Restart agent → Dashboard menampilkan **WARNING** + alert log + notifikasi Telegram.
+
+### Deadman's Switch (Server Down Detection)
+1. Stop agent: `Ctrl+C`
+2. Tunggu ~30 detik
+3. Backend otomatis menandai server **● OFFLINE**
+4. Alert `SERVER_DOWN` muncul di dashboard dan terkirim ke Telegram
+
+## 6️⃣ Validasi Data di TimescaleDB
+
+```bash
+# Query 5 metrik terakhir
+sudo docker exec -it netpulse-db psql -U netpulse -d netpulse_db -c \
+  "SELECT time, cpu_percent, ram_percent, ram_total_bytes FROM server_metrics ORDER BY time DESC LIMIT 5;"
+
+# Cek jumlah total data metrik
+sudo docker exec -it netpulse-db psql -U netpulse -d netpulse_db -c \
+  "SELECT COUNT(*) FROM server_metrics;"
+
+# Cek server terdaftar
+sudo docker exec -it netpulse-db psql -U netpulse -d netpulse_db -c \
+  "SELECT id, name, ip_address, status, last_seen_at FROM servers;"
+
+# Cek alert logs
+sudo docker exec -it netpulse-db psql -U netpulse -d netpulse_db -c \
+  "SELECT id, server_id, alert_type, severity, message, triggered_at FROM alert_logs ORDER BY triggered_at DESC LIMIT 5;"
+```
+
+## 7️⃣ Multi-Server Monitoring
+
+Untuk monitoring beberapa server sekaligus:
+
+1. Daftarkan server baru dari dashboard (ulangi langkah 3)
+2. Install agent di setiap target server
+3. Masing-masing agent pakai API key unik dari dashboard
+4. Dashboard menampilkan semua server dalam satu fleet overview
+
+## 8️⃣ Quick Start Script (Ubuntu VM)
+
+```bash
+#!/bin/bash
+# start_netpulse.sh - Jalankan semua komponen NetPulse
+
+cd /home/fadli/NetPulse
+
+# Start database + backend
+sudo docker compose up -d
+
+# Start frontend
+cd frontend
+pkill -f "node server.js" 2>/dev/null
+nohup node server.js > /tmp/netpulse-frontend.log 2>&1 &
+
+# Start agent
+cd ../agent
+source venv/bin/activate
+nohup python3 agent.py > /tmp/netpulse-agent.log 2>&1 &
+
+echo "✅ NetPulse is running!"
+echo "   Dashboard: http://$(hostname -I | awk '{print $1}'):3000"
+echo "   Backend:   http://$(hostname -I | awk '{print $1}'):8000/docs"
+```
+
+---
+
+## Teknologi yang Digunakan
+
+| Komponen | Teknologi |
+|----------|-----------|
+| Database | TimescaleDB (PostgreSQL + time-series extension) |
+| Backend API | FastAPI (Python) + Uvicorn |
+| Frontend | Vanilla JS + Tailwind CSS (single-file prototype) |
+| Agent | Python + psutil + httpx |
+| Containerization | Docker & Docker Compose |
+| Alerting | Telegram Bot API / Discord Webhook |
+| Networking | Tailscale VPN |
+
+---
+
+## Tim Pengembang
+
+- **Fadli Sutaji Muidita** — System Architect & DevOps
+- **Haikal** — Backend & Database
+- **Reihan** — Frontend & UI/UX
 
 ---
