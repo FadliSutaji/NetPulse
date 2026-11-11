@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetPulse — Cloud Server Monitoring Dashboard (Prototype)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {} }
+    };
+  </script>
+  <style>
+    body { background-color: #020617; color: #f1f5f9; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+
+  <!-- APP CONTAINER -->
+  <div id="app"></div>
+
+  <script>
+    // =========================================================================
+    // STATE & DATA INITIALIZATION (Mendukung Login admin / admin123 + Live/Demo)
+    // =========================================================================
+    const API_BASE = "http://localhost:8000/api/v1";
+
+    const state = {
+      token: localStorage.getItem("np_token") || null,
+      user: localStorage.getItem("np_user") ? JSON.parse(localStorage.getItem("np_user")) : null,
+      view: localStorage.getItem("np_token") ? "dashboard" : "login",
+      mode: localStorage.getItem("np_token") ? "live" : "demo",  // "live" | "demo"
+      selectedServerId: null,
+      isAddModalOpen: false,
+      newlyCreatedServer: null,
+      loginError: "",
+      simBanner: "",
+      servers: [
+        {
+          id: "srv-prod-01",
+          name: "Production-VPS-Ubuntu-01",
+          ip_address: "103.150.10.25",
+          api_key: "np_sec_prod01_9f8e7d6c5b4a3f2e1d0c9b8a",
+          status: "ONLINE",
+          cores: 4,
+          ramTotalGb: 8.0,
+          cpu: 28.4,
+          ram: 54.2,
+          last_seen_at: new Date().toISOString(),
+          historyCpu: [24, 26, 25, 29, 31, 27, 26, 30, 28, 29, 27, 28.4],
+          historyRam: [52, 53, 53, 54, 54, 55, 54, 54, 53, 54, 54, 54.2]
+        },
+        {
+          id: "srv-db-02",
+          name: "TimescaleDB-Cluster-Node",
+          ip_address: "103.150.10.26",
+          api_key: "np_sec_db02_1a2b3c4d5e6f7a8b9c0d1e2f",
+          status: "WARNING",
+          cores: 8,
+          ramTotalGb: 16.0,
+          cpu: 88.6,
+          ram: 81.5,
+          last_seen_at: new Date().toISOString(),
+          historyCpu: [76, 79, 82, 85, 87, 89, 86, 88, 90, 87, 89, 88.6],
+          historyRam: [78, 79, 80, 80, 81, 82, 81, 82, 81, 82, 81, 81.5]
+        },
+        {
+          id: "srv-worker-03",
+          name: "Backup-Worker-VM-Local",
+          ip_address: "192.168.1.50",
+          api_key: "np_sec_wrk03_5f4e3d2c1b0a9f8e7d6c5b4a",
+          status: "OFFLINE",
+          cores: 2,
+          ramTotalGb: 4.0,
+          cpu: 0.0,
+          ram: 0.0,
+          last_seen_at: new Date(Date.now() - 120000).toISOString(),
+          historyCpu: [35, 32, 30, 28, 0, 0, 0, 0, 0, 0, 0, 0],
+          historyRam: [45, 45, 44, 44, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+      ],
+      alerts: [
+        {
+          id: 1,
+          server_id: "srv-worker-03",
+          alert_type: "SERVER_DOWN",
+          severity: "CRITICAL",
+          message: "🚨 [ALERT] SERVER DOWN — Backup-Worker-VM-Local (192.168.1.50) tidak mengirim telemetri > 30 detik (Deadman's Switch).",
+          triggered_at: new Date(Date.now() - 95000).toLocaleTimeString("id-ID")
+        },
+        {
+          id: 2,
+          server_id: "srv-db-02",
+          alert_type: "HIGH_CPU",
+          severity: "WARNING",
+          message: "🔥 [ALERT] HIGH CPU USAGE — TimescaleDB-Cluster-Node mencapai 88.6% (Melebihi ambang batas 85%).",
+          triggered_at: new Date(Date.now() - 30000).toLocaleTimeString("id-ID")
+        }
+      ]
+    };
+
+    // Update metrik simulasi setiap 3 detik agar grafik bergerak hidup di depan dosen
+    setInterval(() => {
+      if (state.view === "login") return;
+
+      // Jika mode LIVE, ambil data nyata dari backend secara periodik
+      if (state.mode === "live" && state.token) {
+        fetchServersFromBackend().then(() => {
+          if (!state.isAddModalOpen) render();
+        });
+        return;
+      }
+
+      // Fallback demo mode acak
+      state.servers.forEach(srv => {
+        if (srv.status === "OFFLINE") {
+          srv.cpu = 0;
+          srv.ram = 0;
+        } else {
+          const baseCpu = srv.status === "WARNING" ? 89 : 28;
+          const baseRam = srv.status === "WARNING" ? 83 : 54;
+          srv.cpu = Number(Math.max(5, Math.min(99, baseCpu + (Math.random() * 8 - 4))).toFixed(1));
+          srv.ram = Number(Math.max(15, Math.min(97, baseRam + (Math.random() * 3 - 1.5))).toFixed(1));
+          srv.last_seen_at = new Date().toISOString();
+        }
+        srv.historyCpu = [...srv.historyCpu.slice(1), srv.cpu];
+        srv.historyRam = [...srv.historyRam.slice(1), srv.ram];
+      });
+      if (!state.isAddModalOpen) render();
+    }, 4000);
+
+    // Fungsi membuat SVG Area Chart yang mulus
+    function buildSvgChart(data, strokeColor, fillId) {
+      const width = 520;
+      const height = 170;
+      const pad = 20;
+      const pts = data.map((val, idx) => {
+        const x = pad + (idx / Math.max(1, data.length - 1)) * (width - pad * 2);
+        const y = height - pad - (Math.min(100, Math.max(0, val)) / 100) * (height - pad * 2);
+        return `${x},${y}`;
+      });
+      const polylinePoints = pts.join(" ");
+      const areaPoints = `${pad},${height - pad} ${polylinePoints} ${width - pad},${height - pad}`;
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" class="w-full h-48 overflow-visible">
+          <defs>
+            <linearGradient id="${fillId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.38"/>
+              <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0"/>
+            </linearGradient>
+          </defs>
+          <!-- Grid lines -->
+          <line x1="${pad}" y1="${pad}" x2="${width-pad}" y2="${pad}" stroke="#1e293b" stroke-dasharray="3 3" />
+          <line x1="${pad}" y1="${height/2}" x2="${width-pad}" y2="${height/2}" stroke="#1e293b" stroke-dasharray="3 3" />
+          <line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="#1e293b" />
+          <text x="0" y="${pad+4}" fill="#64748b" font-size="10">100%</text>
+          <text x="0" y="${height/2+4}" fill="#64748b" font-size="10">50%</text>
+          <text x="4" y="${height-pad+4}" fill="#64748b" font-size="10">0%</text>
+
+          <polygon points="${areaPoints}" fill="url(#${fillId})" />
+          <polyline fill="none" stroke="${strokeColor}" stroke-width="2.5" points="${polylinePoints}" />
+        </svg>
+      `;
+    }
+
+    async function fetchServersFromBackend() {
+      if (!state.token) return;
+      try {
+        const res = await fetch(API_BASE + '/servers', {
+          headers: { 'Authorization': 'Bearer ' + state.token }
+        });
+        if (!res.ok) return;
+        const list = await res.json();
+
+        // Fetch metrik terbaru & riwayat alert dari backend
+        const serversWithMetrics = await Promise.all(list.map(async s => {
+          let cpu = 0;
+          let ram = 0;
+          let cores = 4;
+          let ramTotalGb = 8.0;
+
+          try {
+            const mRes = await fetch(`${API_BASE}/metrics/${s.id}/latest`, {
+              headers: { 'Authorization': 'Bearer ' + state.token }
+            });
+            if (mRes.ok) {
+              const m = await mRes.json();
+              cpu = m.cpu_percent || 0;
+              ram = m.ram_percent || 0;
+              cores = m.cpu_cores || 4;
+              if (m.ram_total_bytes) {
+                ramTotalGb = Number((m.ram_total_bytes / (1024**3)).toFixed(1));
+              }
+            }
+          } catch (_) {}
+
+          // Cari riwayat history yang sudah ada sebelumnya di state agar grafik tetap smooth
+          const existing = state.servers.find(old => old.id === s.id);
+          const historyCpu = existing && existing.historyCpu ? [...existing.historyCpu.slice(1), cpu] : Array(12).fill(cpu);
+          const historyRam = existing && existing.historyRam ? [...existing.historyRam.slice(1), ram] : Array(12).fill(ram);
+
+          return {
+            id: s.id,
+            name: s.name,
+            ip_address: s.ip_address,
+            api_key: s.api_key || '',
+            status: s.status || 'OFFLINE',
+            cores: cores,
+            ramTotalGb: ramTotalGb,
+            cpu: cpu,
+            ram: ram,
+            last_seen_at: s.last_seen_at || new Date().toISOString(),
+            historyCpu: historyCpu,
+            historyRam: historyRam
+          };
+        }));
+
+        state.servers = serversWithMetrics;
+
+        // Fetch Alert Logs nyata dari Backend
+        try {
+          const aRes = await fetch(`${API_BASE}/alerts/logs?limit=20`, {
+            headers: { 'Authorization': 'Bearer ' + state.token }
+          });
+          if (aRes.ok) {
+            const logs = await aRes.json();
+            if (logs && logs.length > 0) {
+              state.alerts = logs.map(a => ({
+                id: a.id,
+                server_id: a.server_id,
+                alert_type: a.alert_type,
+                severity: a.severity,
+                message: a.message,
+                triggered_at: new Date(a.triggered_at).toLocaleTimeString('id-ID')
+              }));
+            }
+          }
+        } catch (_) {}
+
+      } catch(e) { console.error('fetchServers error:', e); }
+    }
+
+    // Actions
+    async function handleLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById("login-username").value.trim();
+      const p = document.getElementById("login-password").value;
+
+      // Coba ke Backend asli dulu jika menyala
+      try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          state.token = data.access_token;
+          state.user = data.user || { username: u, role: "admin" };
+          state.mode = "live";
+          state.view = "dashboard";
+          state.loginError = "";
+          localStorage.setItem("np_token", state.token);
+          localStorage.setItem("np_user", JSON.stringify(state.user));
+          await fetchServersFromBackend();
+          render();
+          return;
+        }
+      } catch (_) {}
+
+      // Validasi akun default admin / admin123
+      if (u === "admin" && p === "admin123") {
+        state.user = { username: "admin", role: "admin" };
+        state.mode = "demo";
+        state.view = "dashboard";
+        state.loginError = "";
+        render();
+      } else {
+        state.loginError = "Username atau Password salah! Gunakan akun: admin / admin123";
+        render();
+      }
+    }
+
+    function handleLogout() {
+      state.user = null;
+      state.token = null;
+      state.view = "login";
+      state.mode = "demo";
+      localStorage.removeItem("np_token");
+      localStorage.removeItem("np_user");
+      render();
+    }
+
+    function openServerDetail(id) {
+      state.selectedServerId = id;
+      state.view = "detail";
+      render();
+    }
+
+    function triggerSimulation(serverId, status) {
+      const srv = state.servers.find(s => s.id === serverId);
+      if (!srv) return;
+      srv.status = status;
+      const nowStr = new Date().toLocaleTimeString("id-ID");
+
+      if (status === "WARNING") {
+        srv.cpu = 92.4;
+        srv.ram = 86.1;
+        state.alerts.unshift({
+          id: Date.now(),
+          server_id: srv.id,
+          alert_type: "HIGH_CPU",
+          severity: "WARNING",
+          message: `🔥 [ALERT] HIGH CPU USAGE — Server ${srv.name} (${srv.ip_address}) melonjak ke 92.4% (Batas: 85%). Notifikasi dikirim ke Telegram Bot!`,
+          triggered_at: nowStr
+        });
+        state.simBanner = `Simulasi Lonjakan CPU (>85%) diaktifkan! Alert Telegram tercatat.`;
+      } else if (status === "OFFLINE") {
+        srv.cpu = 0;
+        srv.ram = 0;
+        state.alerts.unshift({
+          id: Date.now(),
+          server_id: srv.id,
+          alert_type: "SERVER_DOWN",
+          severity: "CRITICAL",
+          message: `🚨 [ALERT] SERVER DOWN — Server ${srv.name} (${srv.ip_address}) berhenti mengirim heartbeat > 30 detik (Deadman's Switch). Notifikasi dikirim ke Telegram Bot!`,
+          triggered_at: nowStr
+        });
+        state.simBanner = `Simulasi Server Mati (Deadman's Switch) diaktifkan! Status berubah menjadi OFFLINE.`;
+      } else {
+        srv.cpu = 26.5;
+        srv.ram = 51.0;
+        state.simBanner = `Server ${srv.name} kembali ke kondisi ONLINE normal.`;
+      }
+      render();
+      setTimeout(() => { state.simBanner = ""; render(); }, 4000);
+    }
+
+    async function handleAddServer(e) {
+      e.preventDefault();
+      const name = document.getElementById("new-srv-name").value.trim();
+      const ip = document.getElementById("new-srv-ip").value.trim() || "103.150.10.99";
+      if (!name) return;
+
+      if (state.mode === "live" && state.token) {
+        try {
+          const res = await fetch(API_BASE + "/servers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.token },
+            body: JSON.stringify({ name, ip_address: ip })
+          });
+          if (res.ok) {
+            const s = await res.json();
+            const newSrv = {
+              id: s.id, name: s.name, ip_address: s.ip_address, api_key: s.api_key || '',
+              status: "OFFLINE", cores: 4, ramTotalGb: 8.0, cpu: 0, ram: 0,
+              last_seen_at: new Date().toISOString(),
+              historyCpu: Array(12).fill(0), historyRam: Array(12).fill(0)
+            };
+            state.servers.unshift(newSrv);
+            state.newlyCreatedServer = newSrv;
+            render();
+            return;
+          }
+        } catch(e) { console.error(e); }
+      }
+
+      const randomHex = Array.from({length: 20}, () => Math.floor(Math.random()*16).toString(16)).join("");
+      const newSrv = {
+        id: "srv-" + Date.now(),
+        name,
+        ip_address: ip,
+        api_key: "np_sec_" + randomHex,
+        status: "ONLINE",
+        cores: 4,
+        ramTotalGb: 8.0,
+        cpu: 19.5,
+        ram: 41.2,
+        last_seen_at: new Date().toISOString(),
+        historyCpu: [18, 19, 20, 18, 21, 19, 20, 18, 19, 20, 19, 19.5],
+        historyRam: [40, 41, 41, 41, 42, 41, 41, 41, 41, 41, 41, 41.2]
+      };
+      state.servers.unshift(newSrv);
+      state.newlyCreatedServer = newSrv;
+      render();
+    }
+
+    function copyApiKey(id) {
+      const srv = state.servers.find(s => s.id === id);
+      if (!srv) return;
+      navigator.clipboard.writeText(srv.api_key).then(() => {
+        state.simBanner = "Copied! X-Server-Key untuk " + srv.name + ": " + srv.api_key;
+        render();
+        setTimeout(() => { state.simBanner = ""; render(); }, 4000);
+      }).catch(() => {
+        alert("X-Server-Key:\n" + srv.api_key);
+      });
+    }
+
+    function deleteServer(id) {
+      state.servers = state.servers.filter(s => s.id !== id);
+      render();
+    }
+
+    // =========================================================================
+    // RENDER UI
+    // =========================================================================
+    function render() {
+      const root = document.getElementById("app");
+
+      if (state.view === "login") {
+        root.innerHTML = `
+          <div class="flex min-h-screen flex-col justify-center px-4 py-12 sm:px-6 lg:px-8">
+            <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
+              <div class="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-bold text-xl">
+                ⚡
+              </div>
+              <h1 class="mt-4 text-2xl font-bold tracking-tight text-white">
+                Net<span class="text-emerald-400">Pulse</span> Cloud Monitoring
+              </h1>
+              <p class="mt-1 text-sm text-slate-400">
+                Server Observability, TimescaleDB Telemetry & Telegram Alerting
+              </p>
+            </div>
+
+            <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+              <div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-6 py-8 shadow-2xl sm:px-8">
+                <div class="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200">
+                  <div class="font-semibold text-emerald-300 mb-1">✨ Akun Default Prototype Dosen:</div>
+                  <div class="flex gap-4 text-slate-300">
+                    <span>Username: <code class="font-bold text-white">admin</code></span>
+                    <span>Password: <code class="font-bold text-white">admin123</code></span>
+                  </div>
+                </div>
+
+                ${state.loginError ? `
+                  <div class="mb-4 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-300">
+                    ${state.loginError}
+                  </div>
+                ` : ""}
+
+                <form onsubmit="handleLogin(event)" class="space-y-4">
+                  <div>
+                    <label class="block text-xs font-medium uppercase tracking-wider text-slate-300">Username</label>
+                    <input id="login-username" type="text" value="admin" required
+                      class="mt-1.5 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium uppercase tracking-wider text-slate-300">Password</label>
+                    <input id="login-password" type="password" value="admin123" required
+                      class="mt-1.5 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none" />
+                  </div>
+                  <button type="submit"
+                    class="w-full rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-emerald-400 transition">
+                    Masuk ke Dashboard NetPulse
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const navbarHtml = `
+        <header class="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
+          <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
+            <div class="flex items-center gap-4">
+              <button onclick="state.view='dashboard'; render();" class="flex items-center gap-2 text-left">
+                <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-bold">⚡</span>
+                <span class="text-lg font-bold text-white">Net<span class="text-emerald-400">Pulse</span></span>
+                <span class="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">v1.0 MVP</span>
+              </button>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
+                ● ${state.mode === "live" ? "Live Backend API" : "Prototype Interactive Mode"}
+              </span>
+              <span class="hidden sm:inline-block rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-xs text-slate-300">
+                👤 <strong>${state.user?.username}</strong> (${state.user?.role})
+              </span>
+              <button onclick="handleLogout()" class="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/10">
+                Logout
+              </button>
+            </div>
+          </div>
+        </header>
+      `;
+
+      if (state.view === "dashboard") {
+        const onlineCount = state.servers.filter(s => s.status === "ONLINE").length;
+        const warningCount = state.servers.filter(s => s.status === "WARNING").length;
+        const offlineCount = state.servers.filter(s => s.status === "OFFLINE").length;
+
+        root.innerHTML = `
+          ${navbarHtml}
+          <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <h1 class="text-2xl font-bold text-white">Cloud Server Fleet Overview</h1>
+                <p class="mt-1 text-sm text-slate-400">Pemantauan metrik CPU, RAM, dan status Heartbeat secara real-time (Interval 10 detik)</p>
+              </div>
+              <button onclick="state.isAddModalOpen=true; state.newlyCreatedServer=null; render();"
+                class="rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition">
+                + Tambah Server / VM Baru
+              </button>
+            </div>
+
+            <!-- 4 Summary Cards -->
+            <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <div class="text-xs uppercase text-slate-400">Total Server</div>
+                <div class="mt-2 text-3xl font-bold text-white">${state.servers.length}</div>
+                <div class="mt-1 text-xs text-slate-500">Node terdaftar di TimescaleDB</div>
+              </div>
+              <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+                <div class="text-xs uppercase text-emerald-300">Server Online</div>
+                <div class="mt-2 text-3xl font-bold text-emerald-400">${onlineCount}</div>
+                <div class="mt-1 text-xs text-emerald-300/70">Heartbeat aktif &lt; 30 detik</div>
+              </div>
+              <div class="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+                <div class="text-xs uppercase text-amber-300">High Load (Warning)</div>
+                <div class="mt-2 text-3xl font-bold text-amber-400">${warningCount}</div>
+                <div class="mt-1 text-xs text-amber-300/70">CPU &gt; 85% atau RAM &gt; 90%</div>
+              </div>
+              <div class="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-5">
+                <div class="text-xs uppercase text-rose-300">Server Offline</div>
+                <div class="mt-2 text-3xl font-bold text-rose-400">${offlineCount}</div>
+                <div class="mt-1 text-xs text-rose-300/70">Deadman's Switch terpicu</div>
+              </div>
+            </div>
+
+            <!-- Server Cards -->
+            <h2 class="mt-8 text-lg font-semibold text-white">Daftar Target Server & VM (Klik untuk Detail Grafik & Simulasi)</h2>
+            <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              ${state.servers.map(srv => {
+                const badgeClass = srv.status === "ONLINE"
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                  : srv.status === "WARNING"
+                  ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                  : "border-rose-500/40 bg-rose-500/15 text-rose-300";
+
+                const cpuBar = srv.cpu >= 85 ? "bg-rose-500" : srv.cpu >= 70 ? "bg-amber-400" : "bg-sky-400";
+                const ramBar = srv.ram >= 90 ? "bg-rose-500" : srv.ram >= 75 ? "bg-amber-400" : "bg-purple-400";
+
+                return `
+                  <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 hover:border-emerald-500/50 transition flex flex-col justify-between">
+                    <div>
+                      <div class="flex items-start justify-between">
+                        <div>
+                          <button onclick="openServerDetail('${srv.id}')" class="text-left text-base font-bold text-white hover:text-emerald-400">
+                            ${srv.name} ↗
+                          </button>
+                          <div class="font-mono text-xs text-slate-400">IP: ${srv.ip_address}</div>
+                        </div>
+                        <span class="rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${badgeClass}">
+                          ● ${srv.status}
+                        </span>
+                      </div>
+
+                      <div class="mt-5 space-y-3">
+                        <div>
+                          <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">CPU Usage (${srv.cores} Cores)</span>
+                            <span class="font-mono font-bold text-white">${srv.cpu.toFixed(1)}%</span>
+                          </div>
+                          <div class="mt-1.5 h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full ${cpuBar} transition-all duration-500" style="width:${Math.min(100, srv.cpu)}%"></div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">RAM Usage (${srv.ramTotalGb} GB)</span>
+                            <span class="font-mono font-bold text-white">${srv.ram.toFixed(1)}%</span>
+                          </div>
+                          <div class="mt-1.5 h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full ${ramBar} transition-all duration-500" style="width:${Math.min(100, srv.ram)}%"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="mt-5 flex items-center justify-between border-t border-slate-800 pt-3 text-xs text-slate-400">
+                      <span>Heartbeat: ${new Date(srv.last_seen_at).toLocaleTimeString("id-ID")}</span>
+                      <div class="flex gap-2">
+                        <button onclick="copyApiKey('${srv.id}')" class="rounded-lg bg-slate-800 px-2.5 py-1 font-medium text-amber-400 hover:bg-slate-700" title="${srv.api_key}">
+                          Salin Key
+                        </button>
+                        <button onclick="openServerDetail('${srv.id}')" class="rounded-lg bg-slate-800 px-2.5 py-1 font-medium text-emerald-400 hover:bg-slate-700">
+                          Buka Grafik & Simulasi
+                        </button>
+                        <button onclick="deleteServer('${srv.id}')" class="rounded-lg px-2 py-1 text-rose-400 hover:bg-rose-500/15">
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+
+            <!-- Tabel Alert Logs -->
+            <h2 class="mt-10 text-lg font-semibold text-white">🔔 Riwayat Peringatan Otomatis (Telegram & Discord Alert Logs)</h2>
+            <div class="mt-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
+              <table class="w-full text-left text-xs">
+                <thead class="border-b border-slate-800 bg-slate-900 uppercase text-slate-400">
+                  <tr>
+                    <th class="px-4 py-3">Waktu</th>
+                    <th class="px-4 py-3">Tipe Alert</th>
+                    <th class="px-4 py-3">Severity</th>
+                    <th class="px-4 py-3">Pesan Notifikasi (Telegram Bot)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${state.alerts.map(a => `
+                    <tr>
+                      <td class="px-4 py-3 font-mono text-slate-400">${a.triggered_at}</td>
+                      <td class="px-4 py-3 font-bold text-white">${a.alert_type}</td>
+                      <td class="px-4 py-3">
+                        <span class="rounded-full px-2.5 py-0.5 text-[10px] font-bold ${a.severity === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">
+                          ${a.severity}
+                        </span>
+                      </td>
+                      <td class="px-4 py-3 text-slate-300">${a.message}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Modal Tambah Server -->
+          ${state.isAddModalOpen ? `
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+              <div class="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 class="text-base font-bold text-white">Daftarkan Server / VM Baru</h3>
+                  <button onclick="state.isAddModalOpen=false; render();" class="text-slate-400 hover:text-white">✕</button>
+                </div>
+                ${!state.newlyCreatedServer ? `
+                  <form onsubmit="handleAddServer(event)" class="mt-4 space-y-4">
+                    <div>
+                      <label class="block text-xs text-slate-300">Nama Server / VM Target</label>
+                      <input id="new-srv-name" type="text" required placeholder="Contoh: VM-Ubuntu-Kelompok-01"
+                        class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-white" />
+                    </div>
+                    <div>
+                      <label class="block text-xs text-slate-300">IP Address Server</label>
+                      <input id="new-srv-ip" type="text" required placeholder="Contoh: 192.168.1.50"
+                        class="mt-1 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-white" />
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                      <button type="button" onclick="state.isAddModalOpen=false; render();" class="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300">Batal</button>
+                      <button type="submit" class="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950">Generate X-Server-Key</button>
+                    </div>
+                  </form>
+                ` : `
+                  <div class="mt-4 space-y-4">
+                    <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+                      Server <strong>${state.newlyCreatedServer.name}</strong> berhasil dibuat! Masukkan <code>X-Server-Key</code> berikut ke <code>agent/config.json</code>:
+                    </div>
+                    <div class="rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-emerald-400 break-all">
+                      ${state.newlyCreatedServer.api_key}
+                    </div>
+                    <div class="flex justify-end">
+                      <button onclick="state.isAddModalOpen=false; render();" class="rounded-xl bg-emerald-500 px-5 py-2 text-xs font-semibold text-slate-950">Selesai</button>
+                    </div>
+                  </div>
+                `}
+              </div>
+            </div>
+          ` : ""}
+        `;
+        return;
+      }
+
+      // DETAIL VIEW
+      const srv = state.servers.find(s => s.id === state.selectedServerId) || state.servers[0];
+      const usedGb = ((srv.ram / 100) * srv.ramTotalGb).toFixed(2);
+      const srvAlerts = state.alerts.filter(a => a.server_id === srv.id);
+
+      root.innerHTML = `
+        ${navbarHtml}
+        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <button onclick="state.view='dashboard'; render();" class="text-xs font-medium text-emerald-400 hover:underline">
+                ← Kembali ke Daftar Server
+              </button>
+              <div class="mt-2 flex items-center gap-3">
+                <h1 class="text-2xl font-bold text-white">${srv.name}</h1>
+                <span class="rounded bg-slate-900 border border-slate-800 px-2.5 py-0.5 font-mono text-xs text-slate-300">${srv.ip_address}</span>
+                <span class="rounded-full px-3 py-0.5 text-xs font-bold ${
+                  srv.status === 'ONLINE' ? 'bg-emerald-500/20 text-emerald-300' : srv.status === 'WARNING' ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'
+                }">● ${srv.status}</span>
+              </div>
+            </div>
+
+            <!-- Tombol Simulasi Demo Dosen -->
+            <div class="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-2.5">
+              <span class="px-2 text-[11px] font-bold uppercase text-slate-400">Simulasi Demo Dosen:</span>
+              <button onclick="triggerSimulation('${srv.id}', 'ONLINE')"
+                class="rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25">
+                ✓ Normal (ONLINE)
+              </button>
+              <button onclick="triggerSimulation('${srv.id}', 'WARNING')"
+                class="rounded-xl bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/25">
+                🔥 Overload CPU (&gt;85%)
+              </button>
+              <button onclick="triggerSimulation('${srv.id}', 'OFFLINE')"
+                class="rounded-xl bg-rose-500/15 border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-500/25">
+                ⚠️ Matikan Server (OFFLINE)
+              </button>
+            </div>
+          </div>
+
+          ${state.simBanner ? `
+            <div class="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs font-medium text-emerald-300">
+              ${state.simBanner}
+            </div>
+          ` : ""}
+
+          <!-- 3 Kartu Metrik Detail -->
+          <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <div class="text-xs text-slate-400">REAL-TIME CPU LOAD</div>
+              <div class="mt-2 font-mono text-3xl font-bold text-sky-400">${srv.cpu.toFixed(1)}%</div>
+              <div class="mt-1 text-xs text-slate-400">Cores: ${srv.cores} vCPU (Threshold Alert: 85%)</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <div class="text-xs text-slate-400">REAL-TIME MEMORY (RAM)</div>
+              <div class="mt-2 font-mono text-3xl font-bold text-purple-400">${srv.ram.toFixed(1)}%</div>
+              <div class="mt-1 text-xs text-slate-400">Terpakai: ${usedGb} GB / ${srv.ramTotalGb} GB (Threshold: 90%)</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <div class="text-xs text-slate-400">X-SERVER-KEY (AGENT TOKEN)</div>
+              <div class="mt-2 truncate rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 font-mono text-xs text-emerald-400">${srv.api_key}</div>
+              <div class="mt-2 text-xs text-slate-400">Last Heartbeat: ${new Date(srv.last_seen_at).toLocaleTimeString("id-ID")}</div>
+            </div>
+          </div>
+
+          <!-- 2 Grafik Real-Time -->
+          <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-white">📈 Tren Penggunaan CPU (%) — TimescaleDB</h3>
+                <span class="font-mono text-xs text-sky-400">${srv.cpu.toFixed(1)}%</span>
+              </div>
+              ${buildSvgChart(srv.historyCpu, "#38bdf8", "cpuGradSvg")}
+            </div>
+
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-white">📊 Tren Penggunaan RAM (%) — TimescaleDB</h3>
+                <span class="font-mono text-xs text-purple-400">${srv.ram.toFixed(1)}%</span>
+              </div>
+              ${buildSvgChart(srv.historyRam, "#c084fc", "ramGradSvg")}
+            </div>
+          </div>
+
+          <!-- Log Alert Server -->
+          <h3 class="mt-8 text-base font-bold text-white">🔔 Riwayat Alert pada ${srv.name}</h3>
+          <div class="mt-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
+            ${srvAlerts.length === 0 ? `
+              <div class="p-6 text-center text-xs text-slate-400">Belum ada insiden pada server ini. Klik tombol "Overload CPU" atau "Matikan Server" di atas untuk mendemokan alert!</div>
+            ` : `
+              <table class="w-full text-left text-xs">
+                <thead class="border-b border-slate-800 bg-slate-900 uppercase text-slate-400">
+                  <tr>
+                    <th class="px-4 py-3">Waktu</th>
+                    <th class="px-4 py-3">Tipe</th>
+                    <th class="px-4 py-3">Severity</th>
+                    <th class="px-4 py-3">Pesan Alert</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                  ${srvAlerts.map(a => `
+                    <tr>
+                      <td class="px-4 py-3 font-mono text-slate-400">${a.triggered_at}</td>
+                      <td class="px-4 py-3 font-bold text-white">${a.alert_type}</td>
+                      <td class="px-4 py-3"><span class="rounded-full px-2 py-0.5 text-[10px] font-bold ${a.severity === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">${a.severity}</span></td>
+                      <td class="px-4 py-3 text-slate-300">${a.message}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    // Jika sudah ada session login tersimpan di browser, langsung fetch server terbaru
+    if (state.token) {
+      fetchServersFromBackend().then(() => render());
+    } else {
+      render();
+    }
+  </script>
+</body>
+</html>
