@@ -8,11 +8,14 @@ from app.config import settings
 
 logger = logging.getLogger("NetPulse.Database")
 
+is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
-    pool_pre_ping=True,
+    pool_pre_ping=not is_sqlite,
+    connect_args={"check_same_thread": False} if is_sqlite else {},
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -35,7 +38,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_timescaledb():
-    """Inisialisasi ekstensi TimescaleDB dan Hypertable untuk metrik."""
+    """Inisialisasi ekstensi TimescaleDB dan Hypertable untuk metrik (khusus PostgreSQL)."""
+    if is_sqlite:
+        logger.info("Mode Lokal (SQLite) aktif — melewati inisialisasi ekstensi TimescaleDB.")
+        return
+
     async with engine.begin() as conn:
         try:
             # Aktifkan ekstensi timescaledb jika belum aktif

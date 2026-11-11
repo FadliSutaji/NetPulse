@@ -14,13 +14,13 @@ class ServerResponse(BaseModel):
     name: str
     ip_address: Optional[str] = None
     status: str
-    last_seen_at: datetime
-    created_at: datetime
+    api_key: str
+    last_seen_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 
-class ServerWithKeyResponse(ServerResponse):
-    """Dikembalikan saat pertama kali server didaftarkan, menyertakan api_key rahasia."""
-    api_key: str
+# Alias untuk backward-compatibility
+ServerWithKeyResponse = ServerResponse

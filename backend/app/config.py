@@ -1,6 +1,10 @@
 import os
+from pathlib import Path
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_DEFAULT_DB_PATH = (_BASE_DIR / "netpulse_local.db").as_posix()
 
 
 class Settings(BaseSettings):
@@ -10,14 +14,20 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 jam
 
-    # Database
+    # Database: Default ke SQLite lokal relatif terhadap backend jika jalan tanpa Docker, atau PostgreSQL/TimescaleDB via ENV
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://netpulse:netpulse_secret@localhost:5432/netpulse_db",
+        f"sqlite+aiosqlite:///{_DEFAULT_DB_PATH}",
     )
 
-    # CORS
-    CORS_ORIGINS: List[str] = [x.strip() for x in os.getenv("CORS_ORIGINS", "*").split(",")]
+    # CORS disimpan sebagai string agar Pydantic EnvSettingsSource tidak pernah error parsing
+    CORS_ORIGINS: str = "*"
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        if not self.CORS_ORIGINS or self.CORS_ORIGINS == "*":
+            return ["*"]
+        return [i.strip() for i in self.CORS_ORIGINS.split(",") if i.strip()]
 
     # Alert Thresholds
     ALERT_CPU_THRESHOLD: float = float(os.getenv("ALERT_CPU_THRESHOLD", "85.0"))
@@ -29,8 +39,7 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
 
-    class Config:
-        case_sensitive = True
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 
 settings = Settings()

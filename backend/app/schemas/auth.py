@@ -1,11 +1,11 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from uuid import UUID
 
 
 class UserRegister(BaseModel):
     username: str
-    email: EmailStr
+    email: str
     password: str
     role: Optional[str] = "admin"
 
@@ -18,7 +18,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: UUID
     username: str
-    email: EmailStr
+    email: str
     role: str
     is_active: bool
 

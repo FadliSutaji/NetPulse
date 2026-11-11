@@ -33,11 +33,8 @@ def load_config(config_path: str = "config.json") -> dict:
 
 def collect_metrics() -> dict:
     """Mengambil metrik sistem Core (CPU & RAM)."""
-    # CPU Usage (%)
     cpu_percent = psutil.cpu_percent(interval=1)
     cpu_cores = psutil.cpu_count(logical=True) or 1
-
-    # Memory / RAM
     mem = psutil.virtual_memory()
 
     return {
@@ -96,6 +93,13 @@ def main():
         while True:
             try:
                 data = collect_metrics()
+
+                # Optional: override nilai CPU/RAM untuk tes alert (isi di config.json)
+                if config.get("force_high_cpu") is not None:
+                    data["metrics"]["cpu"]["percent"] = float(config["force_high_cpu"])
+                if config.get("force_high_ram") is not None:
+                    data["metrics"]["memory"]["percent"] = float(config["force_high_ram"])
+
                 send_telemetry(client, api_url, server_key, data)
             except KeyboardInterrupt:
                 logger.info("Agen dihentikan oleh pengguna.")

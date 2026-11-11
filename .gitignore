@@ -29,6 +29,7 @@ ENV/
 # Environment Variables
 .env
 *.env.local
+agent/config.json
 
 # Database / SQLite
 *.db
