@@ -1,6 +1,10 @@
 import os
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_DEFAULT_DB_PATH = (_BASE_DIR / "netpulse_local.db").as_posix()
 
 
 class Settings(BaseSettings):
@@ -10,10 +14,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 jam
 
-    # Database: Default ke SQLite lokal jika jalan tanpa Docker, atau PostgreSQL/TimescaleDB via ENV
+    # Database: Default ke SQLite lokal relatif terhadap backend jika jalan tanpa Docker, atau PostgreSQL/TimescaleDB via ENV
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "sqlite+aiosqlite:///./netpulse_local.db",
+        f"sqlite+aiosqlite:///{_DEFAULT_DB_PATH}",
     )
 
     # CORS
