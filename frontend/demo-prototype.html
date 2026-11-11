@@ -27,7 +27,7 @@
     // =========================================================================
     // STATE & DATA INITIALIZATION (Mendukung Login admin / admin123 + Live/Demo)
     // =========================================================================
-    const API_BASE = "http://localhost:8000/api/v1";
+    const API_BASE = `http://${window.location.hostname || "localhost"}:8000/api/v1`;
 
     const state = {
       token: localStorage.getItem("np_token") || null,
@@ -402,7 +402,27 @@
       });
     }
 
-    function deleteServer(id) {
+    async function deleteServer(id) {
+      if (!confirm("Apakah Anda yakin ingin menghapus server ini?")) return;
+
+      if (state.mode === "live" && state.token) {
+        try {
+          const res = await fetch(`${API_BASE}/servers/${id}`, {
+            method: "DELETE",
+            headers: { "Authorization": "Bearer " + state.token }
+          });
+          if (res.ok) {
+            state.servers = state.servers.filter(s => s.id !== id);
+            state.simBanner = "✅ Server berhasil dihapus dari sistem.";
+            render();
+            setTimeout(() => { state.simBanner = ""; render(); }, 3000);
+            return;
+          }
+        } catch (e) {
+          console.error("Gagal menghapus server:", e);
+        }
+      }
+
       state.servers = state.servers.filter(s => s.id !== id);
       render();
     }
