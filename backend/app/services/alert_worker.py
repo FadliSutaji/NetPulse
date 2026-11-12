@@ -16,6 +16,7 @@ async def run_alert_check_cycle():
     async with AsyncSessionLocal() as db:
         now = datetime.now(timezone.utc)
         timeout_threshold = now - timedelta(seconds=settings.DEADMAN_TIMEOUT_SECONDS)
+        wib_time = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M:%S WIB")
 
         # 1. Deadman's Switch: Deteksi server yang berhenti kirim heartbeat
         query_offline = (
@@ -34,7 +35,7 @@ async def run_alert_check_cycle():
                 f"• *IP:* `{srv.ip_address or 'N/A'}`\n"
                 f"• *Status:* `OFFLINE`\n"
                 f"• *Catatan:* Tidak mengirim telemetri > {settings.DEADMAN_TIMEOUT_SECONDS} detik.\n"
-                f"• *Waktu:* `{now.strftime('%Y-%m-%d %H:%M:%S UTC')}`"
+                f"• *Waktu:* `{wib_time}`"
             )
             # Simpan log
             alert_entry = AlertLog(
