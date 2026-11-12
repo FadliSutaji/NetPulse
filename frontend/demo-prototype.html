@@ -302,6 +302,25 @@
       render();
     }
 
+    const TELEGRAM_BOT_TOKEN = "9072021490:AAEwiyVaxeyrwd0-q-2HksOfnQsun3UqyUk";
+    const TELEGRAM_CHAT_ID = "7309072996";
+
+    async function sendTelegramNotification(markdownText) {
+      try {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: TELEGRAM_CHAT_ID,
+            text: markdownText,
+            parse_mode: "Markdown"
+          })
+        });
+      } catch (err) {
+        console.error("Gagal mengirim notifikasi Telegram:", err);
+      }
+    }
+
     function triggerSimulation(serverId, status) {
       const srv = state.servers.find(s => s.id === serverId);
       if (!srv) return;
@@ -311,31 +330,55 @@
       if (status === "WARNING") {
         srv.cpu = 92.4;
         srv.ram = 86.1;
+        const msg = `🔥 [ALERT] HIGH CPU USAGE — Server ${srv.name} (${srv.ip_address}) melonjak ke 92.4% (Batas: 85%). Notifikasi dikirim ke Telegram Bot!`;
         state.alerts.unshift({
           id: Date.now(),
           server_id: srv.id,
           alert_type: "HIGH_CPU",
           severity: "WARNING",
-          message: `🔥 [ALERT] HIGH CPU USAGE — Server ${srv.name} (${srv.ip_address}) melonjak ke 92.4% (Batas: 85%). Notifikasi dikirim ke Telegram Bot!`,
+          message: msg,
           triggered_at: nowStr
         });
-        state.simBanner = `Simulasi Lonjakan CPU (>85%) diaktifkan! Alert Telegram tercatat.`;
+        state.simBanner = `Simulasi Lonjakan CPU (>85%) diaktifkan! Notifikasi dikirim ke Telegram Bot.`;
+        sendTelegramNotification(
+          `🔥 *[ALERT] HIGH CPU USAGE*\n\n` +
+          `• *Server:* \`${srv.name}\`\n` +
+          `• *IP:* \`${srv.ip_address}\`\n` +
+          `• *CPU Usage:* \`92.4%\` (Batas: 85%)\n` +
+          `• *RAM Usage:* \`86.1%\`\n` +
+          `• *Waktu:* \`${nowStr} WIB\``
+        );
       } else if (status === "OFFLINE") {
         srv.cpu = 0;
         srv.ram = 0;
+        const msg = `🚨 [ALERT] SERVER DOWN — Server ${srv.name} (${srv.ip_address}) berhenti mengirim heartbeat > 30 detik (Deadman's Switch). Notifikasi dikirim ke Telegram Bot!`;
         state.alerts.unshift({
           id: Date.now(),
           server_id: srv.id,
           alert_type: "SERVER_DOWN",
           severity: "CRITICAL",
-          message: `🚨 [ALERT] SERVER DOWN — Server ${srv.name} (${srv.ip_address}) berhenti mengirim heartbeat > 30 detik (Deadman's Switch). Notifikasi dikirim ke Telegram Bot!`,
+          message: msg,
           triggered_at: nowStr
         });
-        state.simBanner = `Simulasi Server Mati (Deadman's Switch) diaktifkan! Status berubah menjadi OFFLINE.`;
+        state.simBanner = `Simulasi Server Mati (Deadman's Switch) diaktifkan! Notifikasi dikirim ke Telegram Bot.`;
+        sendTelegramNotification(
+          `🚨 *[ALERT] SERVER DOWN*\n\n` +
+          `• *Server:* \`${srv.name}\`\n` +
+          `• *IP:* \`${srv.ip_address}\`\n` +
+          `• *Status:* \`OFFLINE\`\n` +
+          `• *Catatan:* Tidak mengirim telemetri > 30 detik (Deadman's Switch).\n` +
+          `• *Waktu:* \`${nowStr} WIB\``
+        );
       } else {
         srv.cpu = 26.5;
         srv.ram = 51.0;
         state.simBanner = `Server ${srv.name} kembali ke kondisi ONLINE normal.`;
+        sendTelegramNotification(
+          `✅ *[RECOVERY] SERVER ONLINE*\n\n` +
+          `• *Server:* \`${srv.name}\` (${srv.ip_address})\n` +
+          `• *Status:* Kembali normal (\`ONLINE\`)\n` +
+          `• *Waktu:* \`${nowStr} WIB\``
+        );
       }
       render();
       setTimeout(() => { state.simBanner = ""; render(); }, 4000);
