@@ -39,7 +39,7 @@ class Settings(BaseSettings):
         "TELEGRAM_BOT_TOKEN",
         "9072021490:AAEwiyVaxeyrwd0-q-2HksOfnQsun3UqyUk",
     )
-    TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "7309072996")
+    TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "-5527206156")
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")

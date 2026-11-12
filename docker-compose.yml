@@ -33,7 +33,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-netpulse-super-secret-key-2026}
       CORS_ORIGINS: "*"
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-9072021490:AAEwiyVaxeyrwd0-q-2HksOfnQsun3UqyUk}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-7309072996}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:--5527206156}
     ports:
       - "8000:8000"
     volumes:
