@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.config import settings
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from app.database import AsyncSessionLocal, Base, engine, init_timescaledb
 from app.models.user import User
 from app.routers.alerts import router as alerts_router
@@ -17,15 +17,26 @@ from app.services.alert_worker import alert_background_loop
 
 
 async def seed_default_admin():
-    """Membuat akun default admin / admin123 secara otomatis jika belum ada."""
+    """Membuat admin hanya jika bootstrap password dikonfigurasi."""
+    password = settings.BOOTSTRAP_ADMIN_PASSWORD
+    if password and (len(password) < 12 or len(password.encode("utf-8")) > 72):
+        raise ValueError("BOOTSTRAP_ADMIN_PASSWORD must contain at least 12 characters")
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.username == "admin"))
         existing = result.scalar_one_or_none()
-        if not existing:
+        if existing and verify_password("admin123", existing.hashed_password):
+            # Retire the previously shipped public password on existing installs.
+            if password:
+                existing.hashed_password = get_password_hash(password)
+                existing.is_active = True
+            else:
+                existing.is_active = False
+            await db.commit()
+        elif not existing and password:
             default_admin = User(
                 username="admin",
                 email="admin@netpulse.local",
-                hashed_password=get_password_hash("admin123"),
+                hashed_password=get_password_hash(settings.BOOTSTRAP_ADMIN_PASSWORD),
                 role="admin",
                 is_active=True,
             )
@@ -42,7 +53,7 @@ async def lifespan(app: FastAPI):
     # 2. Inisialisasi ekstensi TimescaleDB & Hypertable
     await init_timescaledb()
 
-    # 3. Buat akun default admin / admin123 jika belum ada
+    # 3. Bootstrap admin secara eksplisit jika dikonfigurasi
     await seed_default_admin()
 
     # 4. Jalankan Background Alert Worker

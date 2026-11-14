@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import List
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,7 +11,16 @@ _DEFAULT_DB_PATH = (_BASE_DIR / "netpulse_local.db").as_posix()
 class Settings(BaseSettings):
     PROJECT_NAME: str = "NetPulse"
     API_V1_STR: str = "/api/v1"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "netpulse-dev-secret-key-please-change-in-prod-2026")
+    SECRET_KEY: str = Field(min_length=32)
+    BOOTSTRAP_ADMIN_PASSWORD: str = ""
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def reject_published_secret(cls, value: str) -> str:
+        if value in {"netpulse-dev-secret-key-please-change-in-prod-2026", "netpulse-super-secret-key-2026", "ganti-dengan-kunci-rahasia-jwt-32-karakter-acak"}:
+            raise ValueError("Generate a new random SECRET_KEY")
+        return value
+
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 jam
 
@@ -35,11 +45,8 @@ class Settings(BaseSettings):
     DEADMAN_TIMEOUT_SECONDS: int = int(os.getenv("DEADMAN_TIMEOUT_SECONDS", "30"))
 
     # Notifiers
-    TELEGRAM_BOT_TOKEN: str = os.getenv(
-        "TELEGRAM_BOT_TOKEN",
-        "9072021490:AAEwiyVaxeyrwd0-q-2HksOfnQsun3UqyUk",
-    )
-    TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "-5527206156")
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")

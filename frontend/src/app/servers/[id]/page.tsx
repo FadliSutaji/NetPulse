@@ -33,7 +33,6 @@ import {
   getAuthSession,
   MetricPoint,
   ServerItem,
-  simulateServerCondition,
 } from "@/lib/api";
 
 export default function ServerDetailPage() {
@@ -48,7 +47,11 @@ export default function ServerDetailPage() {
   const [copied, setCopied] = useState(false);
   const [simNotice, setSimNotice] = useState("");
 
+  const [error, setError] = useState("");
+
   const loadDetail = useCallback(async () => {
+    try {
+      setError("");
     const allServers = await fetchServers();
     const found = allServers.find((s) => s.id === serverId) || null;
     setServer(found);
@@ -60,6 +63,9 @@ export default function ServerDetailPage() {
 
     const srvAlerts = await fetchAlertLogs(serverId);
     setAlerts(srvAlerts);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat data");
+    }
   }, [serverId]);
 
   useEffect(() => {
@@ -73,15 +79,6 @@ export default function ServerDetailPage() {
     return () => clearInterval(interval);
   }, [router, loadDetail]);
 
-  const handleSimulate = async (
-    cond: "ONLINE" | "WARNING" | "OFFLINE",
-    label: string
-  ) => {
-    await simulateServerCondition(serverId, cond);
-    setSimNotice(`Simulasi "${label}" diaktifkan!`);
-    await loadDetail();
-    setTimeout(() => setSimNotice(""), 3500);
-  };
 
   const copyKey = () => {
     if (!server?.api_key) return;
@@ -93,7 +90,7 @@ export default function ServerDetailPage() {
   if (!server) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-12 text-center text-slate-400">
-        Memuat detail server...
+        {error || "Memuat detail server..."}
       </div>
     );
   }
@@ -158,33 +155,7 @@ export default function ServerDetailPage() {
           </div>
         </div>
 
-        {/* Panel Kontrol Simulasi Demo Dosen */}
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-2.5">
-          <span className="px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Simulasi Demo Dosen:
-          </span>
-          <button
-            onClick={() => handleSimulate("ONLINE", "Kondisi Normal")}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25 transition"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Normal (ONLINE)
-          </button>
-          <button
-            onClick={() => handleSimulate("WARNING", "Lonjakan CPU > 85%")}
-            className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/25 transition"
-          >
-            <Flame className="h-3.5 w-3.5" />
-            Overload CPU (&gt;85%)
-          </button>
-          <button
-            onClick={() => handleSimulate("OFFLINE", "Server Down / Mati")}
-            className="flex items-center gap-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-500/25 transition"
-          >
-            <PowerOff className="h-3.5 w-3.5" />
-            Matikan Server (OFFLINE)
-          </button>
-        </div>
+
       </div>
 
       {simNotice && (
@@ -193,6 +164,7 @@ export default function ServerDetailPage() {
         </div>
       )}
 
+      {error && <p role="alert" className="text-rose-400">{error}</p>}
       {/* Kartu Ringkasan Metrik Realtime */}
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
@@ -228,7 +200,7 @@ export default function ServerDetailPage() {
           </div>
           <div className="mt-2 flex items-center gap-2">
             <code className="truncate rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-xs text-emerald-400">
-              {server.api_key || "np_sec_configured_on_server"}
+              {server.api_key || "API key hanya ditampilkan saat server dibuat"}
             </code>
             {server.api_key && (
               <button
@@ -247,7 +219,7 @@ export default function ServerDetailPage() {
           <p className="mt-2 text-xs text-slate-400">
             Heartbeat Terakhir:{" "}
             <span className="text-slate-200">
-              {new Date(server.last_seen_at).toLocaleTimeString("id-ID")}
+              {server.last_seen_at ? new Date(server.last_seen_at).toLocaleTimeString("id-ID") : "Belum ada heartbeat"}
             </span>
           </p>
         </div>
@@ -384,7 +356,7 @@ export default function ServerDetailPage() {
         <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           {alerts.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-400">
-              Belum ada insiden pada server ini. Gunakan tombol &quot;Simulasi Demo Dosen&quot; di kanan atas untuk menguji pemicu alert.
+              Belum ada insiden pada server ini. Alert akan muncul saat agent melaporkan masalah.
             </div>
           ) : (
             <div className="overflow-x-auto">

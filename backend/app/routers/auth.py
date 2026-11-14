@@ -15,7 +15,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
     # Periksa username atau email sudah ada
     query = select(User).where((User.username == user_in.username) | (User.email == user_in.email))
-    existing_user = (await db.execute(query)).scalar_one_or_none()
+    existing_user = (await db.execute(query)).scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -26,7 +26,7 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
         username=user_in.username,
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        role=user_in.role or "admin",
+        role="viewer",
     )
     db.add(new_user)
     await db.commit()
@@ -38,7 +38,7 @@ async def register(user_in: UserRegister, db: AsyncSession = Depends(get_db)):
 async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     query = select(User).where(User.username == credentials.username)
     user = (await db.execute(query)).scalar_one_or_none()
-    if not user or not verify_password(credentials.password, user.hashed_password):
+    if not user or not user.is_active or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Username atau Password salah",

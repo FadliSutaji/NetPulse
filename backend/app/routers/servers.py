@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_admin
 from app.core.security import generate_server_api_key
 from app.database import get_db
 from app.models.server import Server
@@ -28,7 +28,7 @@ async def list_servers(
 async def create_server(
     server_in: ServerCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     """Mendaftarkan server baru dan menghasilkan X-Server-Key unik untuk agent."""
     new_server = Server(
@@ -47,7 +47,7 @@ async def create_server(
 async def delete_server(
     server_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     """Menghapus server dari sistem monitoring NetPulse."""
     result = await db.execute(select(Server).where(Server.id == server_id))

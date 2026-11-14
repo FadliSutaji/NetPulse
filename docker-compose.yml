@@ -30,10 +30,11 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-netpulse}:${POSTGRES_PASSWORD:-netpulse_secret}@timescaledb:5432/${POSTGRES_DB:-netpulse_db}
-      SECRET_KEY: ${SECRET_KEY:-netpulse-super-secret-key-2026}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in the root .env file}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       CORS_ORIGINS: "*"
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-9072021490:AAEwiyVaxeyrwd0-q-2HksOfnQsun3UqyUk}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:--5527206156}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     ports:
       - "8000:8000"
     volumes:

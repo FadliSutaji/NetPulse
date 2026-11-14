@@ -60,3 +60,9 @@ async def verify_server_key(
             detail="Server API Key tidak valid atau server tidak terdaftar.",
         )
     return server
+
+
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Akses admin diperlukan")
+    return user

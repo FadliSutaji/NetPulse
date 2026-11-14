@@ -21,7 +21,7 @@ async def run_alert_check_cycle():
         # 1. Deadman's Switch: Deteksi server yang berhenti kirim heartbeat
         query_offline = (
             select(Server)
-            .where(Server.status == "ONLINE")
+            .where(Server.status.in_(["ONLINE", "WARNING"]))
             .where(Server.last_seen_at < timeout_threshold)
         )
         result = await db.execute(query_offline)

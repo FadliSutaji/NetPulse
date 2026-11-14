@@ -46,7 +46,11 @@ export default function DashboardPage() {
   const [createdServer, setCreatedServer] = useState<ServerItem | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
 
+  const [error, setError] = useState("");
+
   const loadDashboardData = useCallback(async () => {
+    try {
+      setError("");
     const srvList = await fetchServers();
     setServers(srvList);
 
@@ -62,6 +66,9 @@ export default function DashboardPage() {
     const alertList = await fetchAlertLogs();
     setAlerts(alertList);
     setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat data");
+    }
   }, []);
 
   useEffect(() => {
@@ -78,20 +85,24 @@ export default function DashboardPage() {
   const handleCreateServer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newServerName.trim()) return;
+    try {
     const created = await createServerApi(
       newServerName.trim(),
-      newServerIp.trim() || "103.150.10.30"
+      newServerIp.trim()
     );
     setCreatedServer(created);
     setNewServerName("");
     setNewServerIp("");
     await loadDashboardData();
+    } catch (err) { setError(err instanceof Error ? err.message : "Operasi gagal"); }
   };
 
   const handleDeleteServer = async (id: string, name: string) => {
     if (!confirm(`Hapus server "${name}" dari pemantauan NetPulse?`)) return;
+    try {
     await deleteServerApi(id);
     await loadDashboardData();
+    } catch (err) { setError(err instanceof Error ? err.message : "Operasi gagal"); }
   };
 
   const copyToClipboard = (text: string) => {
@@ -106,6 +117,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {error && <p role="alert" className="mb-4 text-rose-400">{error}</p>}
       {/* Header Bar */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -127,6 +139,7 @@ export default function DashboardPage() {
           </button>
 
           <button
+            disabled={getAuthSession().user?.role !== "admin"}
             onClick={() => {
               setCreatedServer(null);
               setIsAddOpen(true);
@@ -307,7 +320,7 @@ export default function DashboardPage() {
                     <span>
                       Last seen:{" "}
                       <span className="text-slate-300">
-                        {new Date(srv.last_seen_at).toLocaleTimeString("id-ID")}
+                        {srv.last_seen_at ? new Date(srv.last_seen_at).toLocaleTimeString("id-ID") : "Belum ada heartbeat"}
                       </span>
                     </span>
 
@@ -319,7 +332,8 @@ export default function DashboardPage() {
                         Lihat Grafik
                       </Link>
                       <button
-                        onClick={() => handleDeleteServer(srv.id, srv.name)}
+                        disabled={getAuthSession().user?.role !== "admin"}
+                      onClick={() => handleDeleteServer(srv.id, srv.name)}
                         className="rounded-lg p-1 text-slate-500 hover:bg-rose-500/15 hover:text-rose-400 transition"
                         title="Hapus Server"
                       >

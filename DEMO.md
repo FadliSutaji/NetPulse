@@ -1,3 +1,5 @@
+> Panduan prototipe lama. Untuk aplikasi utama, ikuti [SECURITY_SETUP.md](SECURITY_SETUP.md).
+
 # NetPulse — Demo & Deployment Guide
 
 > Real-time Cloud Server Monitoring dengan TimescaleDB, FastAPI, dan Telegram Alerting.

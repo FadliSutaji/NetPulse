@@ -302,24 +302,8 @@
       render();
     }
 
-    const TELEGRAM_BOT_TOKEN = "9072021490:AAEwiyVaxeyrwd0-q-2HksOfnQsun3UqyUk";
-    const TELEGRAM_CHAT_ID = "-5527206156";
-
-    async function sendTelegramNotification(markdownText) {
-      try {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: TELEGRAM_CHAT_ID,
-            text: markdownText,
-            parse_mode: "Markdown"
-          })
-        });
-      } catch (err) {
-        console.error("Gagal mengirim notifikasi Telegram:", err);
-      }
-    }
+    // Local simulations never send external notifications.
+    function sendTelegramNotification() {}
 
     function triggerSimulation(serverId, status) {
       const srv = state.servers.find(s => s.id === serverId);
@@ -330,7 +314,7 @@
       if (status === "WARNING") {
         srv.cpu = 92.4;
         srv.ram = 86.1;
-        const msg = `🔥 [ALERT] HIGH CPU USAGE — Server ${srv.name} (${srv.ip_address}) melonjak ke 92.4% (Batas: 85%). Notifikasi dikirim ke Telegram Bot!`;
+        const msg = `🔥 [ALERT] HIGH CPU USAGE — Server ${srv.name} (${srv.ip_address}) melonjak ke 92.4% (Batas: 85%). Simulasi lokal; tidak mengirim Telegram.`;
         state.alerts.unshift({
           id: Date.now(),
           server_id: srv.id,
@@ -339,7 +323,7 @@
           message: msg,
           triggered_at: nowStr
         });
-        state.simBanner = `Simulasi Lonjakan CPU (>85%) diaktifkan! Notifikasi dikirim ke Telegram Bot.`;
+        state.simBanner = `Simulasi Lonjakan CPU (>85%) diaktifkan! Simulasi lokal; tidak mengirim Telegram.`;
         sendTelegramNotification(
           `🔥 *[ALERT] HIGH CPU USAGE*\n\n` +
           `• *Server:* \`${srv.name}\`\n` +
@@ -351,7 +335,7 @@
       } else if (status === "OFFLINE") {
         srv.cpu = 0;
         srv.ram = 0;
-        const msg = `🚨 [ALERT] SERVER DOWN — Server ${srv.name} (${srv.ip_address}) berhenti mengirim heartbeat > 30 detik (Deadman's Switch). Notifikasi dikirim ke Telegram Bot!`;
+        const msg = `🚨 [ALERT] SERVER DOWN — Server ${srv.name} (${srv.ip_address}) berhenti mengirim heartbeat > 30 detik (Deadman's Switch). Simulasi lokal; tidak mengirim Telegram.`;
         state.alerts.unshift({
           id: Date.now(),
           server_id: srv.id,
@@ -360,7 +344,7 @@
           message: msg,
           triggered_at: nowStr
         });
-        state.simBanner = `Simulasi Server Mati (Deadman's Switch) diaktifkan! Notifikasi dikirim ke Telegram Bot.`;
+        state.simBanner = `Simulasi Server Mati (Deadman's Switch) diaktifkan! Simulasi lokal; tidak mengirim Telegram.`;
         sendTelegramNotification(
           `🚨 *[ALERT] SERVER DOWN*\n\n` +
           `• *Server:* \`${srv.name}\`\n` +
@@ -390,7 +374,15 @@
       const ip = document.getElementById("new-srv-ip").value.trim() || "103.150.10.99";
       if (!name) return;
 
-      if (state.mode === "live" && state.token) {
+      if (state.mode === "live") {
+        const error = document.getElementById("add-server-error");
+        const submit = document.getElementById("add-server-submit");
+        error.textContent = "";
+        if (!state.token) {
+          error.textContent = "Sesi login berakhir. Login ulang, lalu coba lagi.";
+          return;
+        }
+        submit.disabled = true;
         try {
           const res = await fetch(API_BASE + "/servers", {
             method: "POST",
@@ -408,9 +400,20 @@
             state.servers.unshift(newSrv);
             state.newlyCreatedServer = newSrv;
             render();
-            return;
+          } else if (res.status === 401) {
+            error.textContent = "Sesi login ditolak (HTTP 401). Login ulang, lalu coba lagi.";
+          } else if (res.status === 403) {
+            error.textContent = "Akses ditolak (HTTP 403). Gunakan akun admin.";
+          } else {
+            error.textContent = `Server gagal disimpan (HTTP ${res.status}).`;
           }
-        } catch(e) { console.error(e); }
+        } catch (e) {
+          console.error("Gagal menambahkan server:", e);
+          error.textContent = "Gagal menghubungi backend. Periksa koneksi, lalu coba lagi.";
+        } finally {
+          submit.disabled = false;
+        }
+        return;
       }
 
       const randomHex = Array.from({length: 20}, () => Math.floor(Math.random()*16).toString(16)).join("");
@@ -732,8 +735,9 @@
                     </div>
                     <div class="flex justify-end gap-2 pt-2">
                       <button type="button" onclick="state.isAddModalOpen=false; render();" class="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300">Batal</button>
-                      <button type="submit" class="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950">Generate X-Server-Key</button>
+                      <button id="add-server-submit" type="submit" class="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 disabled:opacity-50">Generate X-Server-Key</button>
                     </div>
+                    <p id="add-server-error" role="alert" class="text-xs text-rose-300"></p>
                   </form>
                 ` : `
                   <div class="mt-4 space-y-4">
