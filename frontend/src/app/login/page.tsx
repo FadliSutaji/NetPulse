@@ -15,8 +15,8 @@ import { loginApi } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -34,11 +34,6 @@ export default function LoginPage() {
     }
   };
 
-  const fillDefaultAdmin = () => {
-    setUsername("admin");
-    setPassword("admin123");
-    setError("");
-  };
 
   return (
     <div className="flex min-h-screen flex-col justify-center bg-slate-950 px-4 py-12 sm:px-6 lg:px-8">
@@ -56,31 +51,6 @@ export default function LoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="rounded-2xl border border-slate-800/90 bg-slate-900/70 px-6 py-8 shadow-2xl backdrop-blur-sm sm:px-8">
-          {/* Info Box Akun Default Dosen/Admin */}
-          <div className="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 font-semibold text-emerald-300">
-                <Sparkles className="h-4 w-4" />
-                Akun Default Prototype Siap Pakai:
-              </span>
-              <button
-                type="button"
-                onClick={fillDefaultAdmin}
-                className="rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-300 hover:bg-emerald-500/30 transition"
-              >
-                Isi Otomatis
-              </button>
-            </div>
-            <div className="mt-1.5 flex items-center gap-4 text-slate-300">
-              <span>
-                Username: <code className="font-bold text-white">admin</code>
-              </span>
-              <span>
-                Password: <code className="font-bold text-white">admin123</code>
-              </span>
-            </div>
-          </div>
-
           {error && (
             <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3.5 text-xs text-rose-200">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />

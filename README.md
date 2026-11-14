@@ -43,7 +43,8 @@ netpulse/
 cd netpulse
 
 # Salin berkas env contoh
-cp backend/.env.example backend/.env
+cp backend/.env.example .env
+# Isi SECRET_KEY acak dan BOOTSTRAP_ADMIN_PASSWORD sebelum menjalankan Compose
 
 # Jalankan database TimescaleDB dan Backend API
 docker compose up -d --build
@@ -71,3 +72,5 @@ python agent.py
 - **Reihan** — Frontend Dashboard & Alert Notifier (`feature/dashboard-alerts`)
 
 Silakan lihat berkas **[`spec.md`](spec.md)** untuk detail pembagian tugas, kontrak API, dan arsitektur database.
+
+Lihat [konfigurasi keamanan dan migrasi](SECURITY_SETUP.md).

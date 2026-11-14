@@ -16,11 +16,14 @@ async def send_telegram_alert(message: str) -> bool:
         "parse_mode": "Markdown",
     }
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(url, json=payload)
-            return resp.status_code == 200
+            if resp.status_code != 200:
+                logger.warning("Telegram menolak notifikasi (HTTP %s)", resp.status_code)
+                return False
+            return True
     except Exception as e:
-        logger.error(f"Gagal kirim notifikasi Telegram: {e}")
+        logger.error("Gagal kirim notifikasi Telegram: %s", type(e).__name__)
         return False
 
 

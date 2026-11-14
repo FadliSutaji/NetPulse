@@ -14,7 +14,6 @@ class ServerResponse(BaseModel):
     name: str
     ip_address: Optional[str] = None
     status: str
-    api_key: str
     last_seen_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
@@ -23,4 +22,5 @@ class ServerResponse(BaseModel):
 
 
 # Alias untuk backward-compatibility
-ServerWithKeyResponse = ServerResponse
+class ServerWithKeyResponse(ServerResponse):
+    api_key: str

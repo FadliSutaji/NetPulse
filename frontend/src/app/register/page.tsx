@@ -45,7 +45,7 @@ export default function RegisterPage() {
           Registrasi Operator Net<span className="text-emerald-400">Pulse</span>
         </h1>
         <p className="mt-1.5 text-center text-sm text-slate-400">
-          Buat akun baru untuk mengelola monitoring server
+          Buat akun viewer untuk melihat monitoring server
         </p>
       </div>
 
@@ -102,10 +102,10 @@ export default function RegisterPage() {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={12}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Minimal 6 karakter"
+                  placeholder="Minimal 12 karakter"
                   className="block w-full rounded-xl border border-slate-700/80 bg-slate-950/90 py-2.5 pl-10 pr-3.5 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
                 />
               </div>
